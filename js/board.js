@@ -1,10 +1,15 @@
 /**
  * BOARD.JS - Renderização do Tabuleiro
  * Responsável por desenhar e atualizar o tabuleiro visualmente
+ * Com suporte a navegação D-pad para TV
  */
 
 const Board = {
   container: null,
+  
+  // Estado do cursor para navegação D-pad
+  cursorRow: 0,
+  cursorCol: 1, // Começa em uma casa escura
 
   /**
    * Inicializa o tabuleiro visual
@@ -14,7 +19,28 @@ const Board = {
     this.container = document.getElementById(containerId);
     if (!this.container) return;
     
+    // Inicia cursor na primeira peça jogável
+    this.cursorRow = 5; // Primeira linha das peças vermelhas
+    this.cursorCol = 0;
+    this.findFirstPlayablePiece();
+    
     this.render();
+  },
+
+  /**
+   * Encontra a primeira peça jogável e posiciona o cursor
+   */
+  findFirstPlayablePiece() {
+    for (let row = 0; row < Game.BOARD_SIZE; row++) {
+      for (let col = 0; col < Game.BOARD_SIZE; col++) {
+        const piece = Game.board[row][col];
+        if (Game.isCurrentPlayerPiece(piece)) {
+          this.cursorRow = row;
+          this.cursorCol = col;
+          return;
+        }
+      }
+    }
   },
 
   /**
@@ -35,10 +61,12 @@ const Board = {
         const isValidMove = Game.validMoves.some(m => m.row === row && m.col === col);
         const mustCapturePieces = Game.getPiecesWithMandatoryCapture();
         const mustCapture = mustCapturePieces.some(p => p.row === row && p.col === col);
+        const isCursor = this.cursorRow === row && this.cursorCol === col;
         
         let cellClass = `cell cell--${isDark ? 'dark' : 'light'}`;
         if (isSelected) cellClass += ' highlight';
         if (isValidMove) cellClass += ' valid-move';
+        if (isCursor) cellClass += ' cursor';
         
         let pieceHtml = '';
         if (piece !== Game.EMPTY) {
@@ -63,7 +91,6 @@ const Board = {
           }
           
           pieceHtml = `<div class="${pieceClass}" 
-                           tabindex="${Game.isCurrentPlayerPiece(piece) ? '0' : '-1'}"
                            data-row="${row}" 
                            data-col="${col}"
                            role="button"
@@ -72,10 +99,9 @@ const Board = {
         }
         
         html += `<div class="${cellClass}" 
-                     tabindex="${isValidMove ? '0' : '-1'}"
                      data-row="${row}" 
                      data-col="${col}"
-                     role="button"
+                     role="gridcell"
                      aria-label="Casa ${isDark ? 'escura' : 'clara'} na linha ${row + 1}, coluna ${col + 1}${isValidMove ? ' - movimento válido' : ''}">
                    ${pieceHtml}
                  </div>`;
@@ -84,6 +110,91 @@ const Board = {
     
     this.container.innerHTML = html;
     this.attachListeners();
+  },
+
+  /**
+   * Trata navegação por teclado no tabuleiro
+   * @param {KeyboardEvent} e
+   * @returns {boolean} Se o evento foi tratado
+   */
+  handleKeyNavigation(e) {
+    const key = e.key;
+    
+    // Navegação por setas - move o cursor
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) {
+      e.preventDefault();
+      this.moveCursor(key);
+      return true;
+    }
+    
+    // Enter/Space - seleciona peça ou move
+    if (key === 'Enter' || key === ' ') {
+      e.preventDefault();
+      this.handleCursorAction();
+      return true;
+    }
+    
+    // Escape - cancela seleção
+    if (key === 'Escape' && Game.selectedPiece && !Game.captureChain) {
+      e.preventDefault();
+      Game.selectedPiece = null;
+      Game.validMoves = [];
+      this.render();
+      Sounds.playCancel();
+      return true;
+    }
+    
+    return false;
+  },
+
+  /**
+   * Move o cursor no tabuleiro
+   * @param {string} key
+   */
+  moveCursor(key) {
+    let newRow = this.cursorRow;
+    let newCol = this.cursorCol;
+    
+    switch (key) {
+      case 'ArrowUp':
+        newRow = Math.max(0, this.cursorRow - 1);
+        break;
+      case 'ArrowDown':
+        newRow = Math.min(Game.BOARD_SIZE - 1, this.cursorRow + 1);
+        break;
+      case 'ArrowLeft':
+        newCol = Math.max(0, this.cursorCol - 1);
+        break;
+      case 'ArrowRight':
+        newCol = Math.min(Game.BOARD_SIZE - 1, this.cursorCol + 1);
+        break;
+    }
+    
+    // Só move se for diferente
+    if (newRow !== this.cursorRow || newCol !== this.cursorCol) {
+      this.cursorRow = newRow;
+      this.cursorCol = newCol;
+      this.render();
+      Sounds.playNavigate();
+    }
+  },
+
+  /**
+   * Executa ação na posição do cursor (selecionar ou mover)
+   */
+  handleCursorAction() {
+    const row = this.cursorRow;
+    const col = this.cursorCol;
+    const piece = Game.board[row][col];
+    
+    // Se há uma peça do jogador atual na posição
+    if (Game.isCurrentPlayerPiece(piece)) {
+      this.handlePieceClick(row, col);
+    } 
+    // Se é uma posição vazia ou movimento
+    else {
+      this.handleCellClick(row, col);
+    }
   },
 
   /**
@@ -96,16 +207,9 @@ const Board = {
         e.stopPropagation();
         const row = parseInt(piece.dataset.row);
         const col = parseInt(piece.dataset.col);
+        this.cursorRow = row;
+        this.cursorCol = col;
         this.handlePieceClick(row, col);
-      });
-      
-      piece.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          const row = parseInt(piece.dataset.row);
-          const col = parseInt(piece.dataset.col);
-          this.handlePieceClick(row, col);
-        }
       });
     });
     
@@ -114,16 +218,9 @@ const Board = {
       cell.addEventListener('click', () => {
         const row = parseInt(cell.dataset.row);
         const col = parseInt(cell.dataset.col);
+        this.cursorRow = row;
+        this.cursorCol = col;
         this.handleCellClick(row, col);
-      });
-      
-      cell.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          const row = parseInt(cell.dataset.row);
-          const col = parseInt(cell.dataset.col);
-          this.handleCellClick(row, col);
-        }
       });
     });
   },
@@ -146,6 +243,7 @@ const Board = {
         Game.selectedPiece = null;
         Game.validMoves = [];
         this.render();
+        Sounds.playCancel();
       }
       return;
     }
@@ -184,6 +282,10 @@ const Board = {
       const result = Game.movePiece(row, col);
       
       if (result.success) {
+        // Move o cursor para a nova posição
+        this.cursorRow = row;
+        this.cursorCol = col;
+        
         this.render();
         App.updateGameInfo();
         
@@ -215,6 +317,15 @@ const Board = {
     this.container.querySelectorAll('.selected').forEach(el => {
       el.classList.remove('selected');
     });
+    this.container.querySelectorAll('.cursor').forEach(el => {
+      el.classList.remove('cursor');
+    });
+    
+    // Adiciona cursor
+    const cursorCell = this.container.querySelector(
+      `.cell[data-row="${this.cursorRow}"][data-col="${this.cursorCol}"]`
+    );
+    if (cursorCell) cursorCell.classList.add('cursor');
     
     // Adiciona novos destaques
     if (Game.selectedPiece) {
@@ -286,9 +397,7 @@ const Board = {
    * Foca na primeira peça jogável (para navegação por teclado)
    */
   focusFirstPlayablePiece() {
-    const firstPiece = this.container.querySelector('.piece[tabindex="0"]');
-    if (firstPiece) {
-      firstPiece.focus();
-    }
+    this.findFirstPlayablePiece();
+    this.render();
   }
 };

@@ -1,6 +1,7 @@
 /**
  * APP.JS - Aplicação Principal
  * Gerencia navegação, telas e inicialização do jogo
+ * Otimizado para TV com navegação D-pad
  */
 
 const App = {
@@ -23,6 +24,9 @@ const App = {
     Storage.init();
     Sounds.init();
     
+    // Cria jogadores padrão se não existirem
+    this.ensureDefaultPlayers();
+    
     // Configura navegação por teclado
     this.setupKeyboardNavigation();
     
@@ -43,27 +47,43 @@ const App = {
   },
 
   /**
+   * Garante que existam jogadores padrão para jogar rapidamente
+   */
+  ensureDefaultPlayers() {
+    const players = Storage.getPlayers();
+    if (players.length === 0) {
+      Storage.addPlayer({ name: 'Jogador 1', color: 'red' });
+      Storage.addPlayer({ name: 'Jogador 2', color: 'blue' });
+    }
+  },
+
+  /**
    * Configura interceptação do botão voltar do navegador
    * Isso é crucial para TV Android onde o controle remoto dispara history.back()
    */
   setupBrowserBackButton() {
-    // Adiciona entrada no histórico para interceptar
-    history.pushState({ screen: 'home' }, '', '');
+    // Adiciona entrada inicial no histórico
+    history.replaceState({ screen: 'home', index: 0 }, '', '');
+    
+    // Flag para controlar nossos próprios pushes
+    this.handlingBack = false;
     
     // Intercepta o evento de voltar do navegador
     window.addEventListener('popstate', (e) => {
-      // Previne saída do jogo
+      // Sempre previne a navegação padrão
       e.preventDefault();
       
-      // Se não estamos na home, volta para a tela anterior
-      if (this.currentScreen !== 'home') {
-        // Re-adiciona entrada no histórico
-        history.pushState({ screen: this.currentScreen }, '', '');
-        this.goBack();
-      } else {
-        // Se já estamos na home, re-adiciona entrada para não sair
-        history.pushState({ screen: 'home' }, '', '');
+      // Se estamos na home, não faz nada (apenas re-adiciona o estado)
+      if (this.currentScreen === 'home') {
+        history.pushState({ screen: 'home', index: 0 }, '', '');
+        return;
       }
+      
+      // Navega de volta internamente
+      this.goBack();
+      
+      // Re-adiciona estado para manter a interceptação
+      history.pushState({ screen: this.currentScreen, index: Date.now() }, '', '');
     });
   },
 
@@ -77,9 +97,12 @@ const App = {
       screen.classList.remove('active');
     });
     
-    // Salva no histórico
+    // Salva no histórico apenas se for uma tela diferente
     if (this.currentScreen && this.currentScreen !== screenId) {
-      this.screenHistory.push(this.currentScreen);
+      // Não duplica entradas no histórico
+      if (this.screenHistory[this.screenHistory.length - 1] !== this.currentScreen) {
+        this.screenHistory.push(this.currentScreen);
+      }
     }
     
     // Mostra a tela solicitada
@@ -93,7 +116,7 @@ const App = {
       
       // Foca no primeiro elemento navegável
       setTimeout(() => {
-        const firstFocusable = screen.querySelector('.focusable, button, input, [tabindex="0"]');
+        const firstFocusable = screen.querySelector('.focusable:not([disabled]), button:not([disabled]), input:not([disabled])');
         if (firstFocusable) {
           firstFocusable.focus();
         }
@@ -103,7 +126,7 @@ const App = {
     // Mostra/esconde botão voltar
     const backBtn = document.getElementById('btn-back');
     if (backBtn) {
-      backBtn.style.display = screenId === 'home' ? 'none' : 'block';
+      backBtn.style.display = screenId === 'home' ? 'none' : 'flex';
     }
   },
 
@@ -139,6 +162,8 @@ const App = {
         Board.init('game-board');
         this.updateGameInfo();
         Sounds.playGameStart();
+        // Foca no tabuleiro para navegação
+        setTimeout(() => Board.focusFirstPlayablePiece(), 200);
         break;
         
       case 'ranking':
@@ -160,7 +185,20 @@ const App = {
     
     Sounds.playCancel();
     
-    const previousScreen = this.screenHistory.pop() || 'home';
+    // Remove a última tela do histórico
+    let previousScreen = this.screenHistory.pop();
+    
+    // Se veio do formulário de jogador, volta para jogadores (não para home)
+    if (this.currentScreen === 'player-form') {
+      previousScreen = 'players';
+      // Limpa duplicatas do histórico
+      this.screenHistory = this.screenHistory.filter(s => s !== 'player-form');
+    }
+    
+    // Se não tem histórico, vai para home
+    if (!previousScreen) {
+      previousScreen = 'home';
+    }
     
     // Esconde todas as telas
     document.querySelectorAll('.screen').forEach(screen => {
@@ -178,7 +216,7 @@ const App = {
     // Botão voltar
     const backBtn = document.getElementById('btn-back');
     if (backBtn) {
-      backBtn.style.display = previousScreen === 'home' ? 'none' : 'block';
+      backBtn.style.display = previousScreen === 'home' ? 'none' : 'flex';
     }
   },
 
@@ -187,6 +225,13 @@ const App = {
    */
   setupKeyboardNavigation() {
     document.addEventListener('keydown', (e) => {
+      // Se estamos no jogo, delega para o Board
+      if (this.currentScreen === 'game' && !Game.gameOver) {
+        if (Board.handleKeyNavigation(e)) {
+          return; // Board tratou o evento
+        }
+      }
+      
       // Navegação por setas
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         e.preventDefault();
@@ -195,9 +240,8 @@ const App = {
       
       // Botão OK/Enter - ativa o elemento focado
       if (e.key === 'Enter' || e.key === ' ') {
-        // Se o elemento ativo é uma célula ou peça do tabuleiro, simula clique
         const active = document.activeElement;
-        if (active && (active.classList.contains('cell') || active.classList.contains('piece'))) {
+        if (active && active.tagName !== 'INPUT') {
           e.preventDefault();
           active.click();
         }
@@ -206,7 +250,9 @@ const App = {
       // Botão voltar (Escape ou Backspace)
       if (e.key === 'Escape' || (e.key === 'Backspace' && document.activeElement.tagName !== 'INPUT')) {
         e.preventDefault();
-        this.goBack();
+        if (this.currentScreen !== 'home') {
+          this.goBack();
+        }
       }
     });
   },
@@ -216,39 +262,21 @@ const App = {
    * @param {string} key 
    */
   handleArrowNavigation(key) {
-    const focusables = Array.from(document.querySelectorAll(
-      '.screen.active .focusable:not([style*="display: none"]), ' +
-      '.screen.active button:not([style*="display: none"]):not(:disabled), ' +
-      '.screen.active input:not([style*="display: none"]):not(:disabled), ' +
-      '.screen.active [tabindex="0"]:not([style*="display: none"])'
+    const activeScreen = document.querySelector('.screen.active');
+    if (!activeScreen) return;
+    
+    const focusables = Array.from(activeScreen.querySelectorAll(
+      '.focusable:not([style*="display: none"]):not([disabled]), ' +
+      'button:not([style*="display: none"]):not(:disabled), ' +
+      'input:not([style*="display: none"]):not(:disabled)'
     )).filter(el => el.offsetParent !== null);
     
     if (focusables.length === 0) return;
     
     const current = document.activeElement;
-    const currentIndex = focusables.indexOf(current);
+    let nextIndex = this.findClosestElement(focusables, current, key.replace('Arrow', '').toLowerCase());
     
-    let nextIndex = currentIndex;
-    
-    // Navegação baseada em posição visual
-    const currentRect = current.getBoundingClientRect();
-    
-    switch (key) {
-      case 'ArrowUp':
-        nextIndex = this.findClosestElement(focusables, current, 'up');
-        break;
-      case 'ArrowDown':
-        nextIndex = this.findClosestElement(focusables, current, 'down');
-        break;
-      case 'ArrowLeft':
-        nextIndex = this.findClosestElement(focusables, current, 'left');
-        break;
-      case 'ArrowRight':
-        nextIndex = this.findClosestElement(focusables, current, 'right');
-        break;
-    }
-    
-    if (nextIndex !== -1 && nextIndex !== currentIndex) {
+    if (nextIndex !== -1 && focusables[nextIndex] !== current) {
       focusables[nextIndex].focus();
       Sounds.playNavigate();
     }
@@ -271,7 +299,7 @@ const App = {
     const currentCenterY = currentRect.top + currentRect.height / 2;
     
     let bestIndex = -1;
-    let bestDistance = Infinity;
+    let bestScore = Infinity;
     
     elements.forEach((el, index) => {
       if (el === current) return;
@@ -284,26 +312,37 @@ const App = {
       const dy = centerY - currentCenterY;
       
       let isValidDirection = false;
+      let primaryDistance = 0;
+      let secondaryDistance = 0;
       
       switch (direction) {
         case 'up':
-          isValidDirection = dy < -10;
+          isValidDirection = dy < -5;
+          primaryDistance = Math.abs(dy);
+          secondaryDistance = Math.abs(dx);
           break;
         case 'down':
-          isValidDirection = dy > 10;
+          isValidDirection = dy > 5;
+          primaryDistance = Math.abs(dy);
+          secondaryDistance = Math.abs(dx);
           break;
         case 'left':
-          isValidDirection = dx < -10;
+          isValidDirection = dx < -5;
+          primaryDistance = Math.abs(dx);
+          secondaryDistance = Math.abs(dy);
           break;
         case 'right':
-          isValidDirection = dx > 10;
+          isValidDirection = dx > 5;
+          primaryDistance = Math.abs(dx);
+          secondaryDistance = Math.abs(dy);
           break;
       }
       
       if (isValidDirection) {
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance < bestDistance) {
-          bestDistance = distance;
+        // Score prioriza direção primária, depois secundária
+        const score = primaryDistance + secondaryDistance * 0.5;
+        if (score < bestScore) {
+          bestScore = score;
           bestIndex = index;
         }
       }
@@ -312,10 +351,14 @@ const App = {
     // Se não encontrou na direção, tenta encontrar o próximo na lista
     if (bestIndex === -1) {
       const currentIndex = elements.indexOf(current);
-      if (direction === 'down' || direction === 'right') {
-        bestIndex = (currentIndex + 1) % elements.length;
+      if (currentIndex !== -1) {
+        if (direction === 'down' || direction === 'right') {
+          bestIndex = (currentIndex + 1) % elements.length;
+        } else {
+          bestIndex = (currentIndex - 1 + elements.length) % elements.length;
+        }
       } else {
-        bestIndex = (currentIndex - 1 + elements.length) % elements.length;
+        bestIndex = 0;
       }
     }
     
