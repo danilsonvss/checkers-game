@@ -21,6 +21,18 @@ const App = {
   gameMode: 'local', // 'local' ou 'multiplayer'
   isMultiplayer: false,
 
+  // Helper para log na tela
+  screenLog(msg) {
+    const logEl = document.getElementById('debug-log');
+    if (logEl) {
+      const line = document.createElement('div');
+      line.textContent = new Date().toLocaleTimeString() + ': ' + msg;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+    console.log('[SCREEN LOG]', msg);
+  },
+
   /**
    * Inicializa a aplicação
    */
@@ -68,20 +80,43 @@ const App = {
   /**
    * Configura interceptação do botão voltar do navegador
    */
-  setupBrowserBackButton() {
+   setupBrowserBackButton() {
+    // Para Navegador
     history.replaceState({ screen: 'home', index: 0 }, '', '');
     
     window.addEventListener('popstate', (e) => {
       e.preventDefault();
-      
-      if (this.currentScreen === 'home') {
-        history.pushState({ screen: 'home', index: 0 }, '', '');
-        return;
+      if (this.currentScreen !== 'home') {
+        this.goBack();
+        history.pushState({ screen: this.currentScreen, index: Date.now() }, '', '');
       }
-      
-      this.goBack();
-      history.pushState({ screen: this.currentScreen, index: Date.now() }, '', '');
     });
+
+    // Para Android/TV (Cordova/Capacitor event)
+    document.addEventListener('backbutton', (e) => {
+      e.preventDefault();
+      if (this.currentScreen !== 'home') {
+        this.goBack();
+      } else {
+        // Se estiver na home, sai do app
+        if (navigator.app && navigator.app.exitApp) {
+          navigator.app.exitApp();
+        } else if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+          window.Capacitor.Plugins.App.exitApp();
+        }
+      }
+    }, false);
+
+    // Tenta usar API do Capacitor diretamente se disponível
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+      window.Capacitor.Plugins.App.addListener('backButton', (data) => {
+        if (this.currentScreen !== 'home') {
+          this.goBack();
+        } else {
+          window.Capacitor.Plugins.App.exitApp();
+        }
+      });
+    }
   },
 
   /**
@@ -89,10 +124,12 @@ const App = {
    */
   setupMultiplayerCallbacks() {
     Multiplayer.onConnected = (playerName) => {
+      this.screenLog('Conectado com: ' + playerName);
       this.showLobbyState('connected', playerName);
     };
     
     Multiplayer.onDisconnected = () => {
+      this.screenLog('Desconectado!');
       if (this.isMultiplayer && this.currentScreen === 'game') {
         alert('Conexão perdida com o oponente!');
         this.goBack();
@@ -100,29 +137,61 @@ const App = {
     };
     
     Multiplayer.onGameStart = (data) => {
-      // Configura e inicia o jogo
-      const players = Storage.getPlayers();
-      this.selectedPlayer1 = players[0] || { id: '1', name: 'Host', color: 'red' };
-      this.selectedPlayer2 = { id: '2', name: Multiplayer.opponentName, color: 'blue' };
+      this.screenLog('JOGO START! ' + (Multiplayer.isHost ? 'HOST' : 'CLIENT'));
+      
+      // Define jogadores baseados nos nomes do servidor (não do storage local)
+      const hostPlayer = { id: 'host', name: data.hostName || 'Host', color: 'red', isLocal: Multiplayer.isHost };
+      const clientPlayer = { id: 'client', name: data.clientName || 'Cliente', color: 'blue', isLocal: !Multiplayer.isHost };
+      
+      // Configura quem é P1 (Red) e P2 (Blue)
+      // No Checkers, P1 é vermelho e começa
+      this.selectedPlayer1 = hostPlayer;
+      this.selectedPlayer2 = clientPlayer;
       
       if (!Multiplayer.isHost) {
-        // Cliente inverte os jogadores (ele é azul)
-        const temp = this.selectedPlayer1;
-        this.selectedPlayer1 = this.selectedPlayer2;
-        this.selectedPlayer2 = temp;
+        // Se eu sou cliente (Blue), eu sou o P2. 
+        // Mas a lógica do Game.init espera (P1, P2) onde P1 começa.
+        // O Game.js lida com quem é local/remoto? 
+        // Game.init(p1, p2) -> p1 is red.
+        // Precisamos garantir que a UI mostre os nomes certos.
       }
+      
+      // Se eu sou Client (Blue/P2), eu preciso inverter a VISÃO? 
+      // Não, tabuleiros de damas geralmente mantém vermelho embaixo se for P1.
+      // Mas se eu sou P2, eu quero minhas peças embaixo? 
+      // IMPLEMENTAÇÃO ATUAL: Tabuleiro fixo, Red (P1) em cima? O padrão do board.js é Red (1,2) topo, Blue (3,4) baixo?
+      // Vamos checar Board.js. Mas por enquanto foco nos nomes.
       
       Game.init(this.selectedPlayer1, this.selectedPlayer2);
       Game.isMultiplayer = true;
       this.isMultiplayer = true;
-      console.log('Game started in MULTIPLAYER mode');
-      // alert('Multiplayer iniciado! Eu sou: ' + (Multiplayer.isHost ? 'Host (Vermelho)' : 'Cliente (Azul)'));
+      
+      console.log('Game started. P1 (Red):', this.selectedPlayer1.name, 'P2 (Blue):', this.selectedPlayer2.name);
+      
+      // Inverte o tabuleiro visualmente se eu for o Cliente (Blue/P2)
+      const boardWrapper = document.querySelector('.board-wrapper');
+      if (boardWrapper) {
+        if (!Multiplayer.isHost) {
+          boardWrapper.classList.add('board-inverted');
+          this.screenLog('Perspectiva invertida (Você é Blue)');
+        } else {
+          boardWrapper.classList.remove('board-inverted');
+        }
+      }
+
       this.showScreen('game');
     };
     
     Multiplayer.onOpponentMove = (from, to) => {
+      this.screenLog(`RECEBIDO move: ${from.row},${from.col} -> ${to.row},${to.col}`);
       console.log('Received opponent move:', from, to);
       console.log('Current player:', Game.currentPlayer, 'Piece at from:', Game.board[from.row][from.col]);
+      
+      // Ajusta coordenadas se o tabuleiro estiver invertido? NO. 
+      // A lógica do jogo é sempre absoluta (0-7). O CSS apenas rotaciona a visualização.
+      // O dataset row/col nos elementos HTML permanece correto (0 no topo, 7 embaixo).
+      // Quando rotacionado, o topo visual vira baixo. O usuário vê linha 0 embaixo.
+      // Mas o elemento continua sendo row="0".
       
       // Força seleção da peça para garantir que o movimento ocorra
       // Bypass da validação de UI pois é um movimento remoto autorizado
@@ -133,6 +202,7 @@ const App = {
       console.log('Move result:', result);
       
       if (result.success) {
+        this.screenLog('Move aplicado OK');
         Board.render();
         this.updateGameInfo();
         
@@ -140,12 +210,14 @@ const App = {
           setTimeout(() => this.showGameOver(result.winner), 500);
         }
       } else {
+        this.screenLog('ERRO ao aplicar move!');
         console.error('Failed to apply opponent move!');
         alert('Erro de sincronização: movimento inválido recebido');
       }
     };
     
     Multiplayer.onError = (message) => {
+      this.screenLog('ERRO MP: ' + message);
       alert('Erro Multiplayer: ' + message);
     };
   },
@@ -682,7 +754,12 @@ const App = {
     const p1Info = document.getElementById('player1-info');
     if (p1Info) {
       p1Info.classList.toggle('active', stats.currentPlayer === 1);
-      document.getElementById('player1-name').textContent = stats.player1.name;
+      
+      let p1Name = stats.player1.name;
+      if (this.isMultiplayer && Multiplayer.myPlayer === 1) {
+        p1Name += ' (Você)';
+      }
+      document.getElementById('player1-name').textContent = p1Name;
       document.getElementById('player1-pieces').textContent = `${stats.redPieces} peças`;
       const p1Avatar = document.getElementById('player1-avatar');
       p1Avatar.style.background = Players.getColorHex(stats.player1.color);
@@ -692,7 +769,12 @@ const App = {
     const p2Info = document.getElementById('player2-info');
     if (p2Info) {
       p2Info.classList.toggle('active', stats.currentPlayer === 2);
-      document.getElementById('player2-name').textContent = stats.player2.name;
+      
+      let p2Name = stats.player2.name;
+      if (this.isMultiplayer && Multiplayer.myPlayer === 2) {
+        p2Name += ' (Você)';
+      }
+      document.getElementById('player2-name').textContent = p2Name;
       document.getElementById('player2-pieces').textContent = `${stats.bluePieces} peças`;
       const p2Avatar = document.getElementById('player2-avatar');
       p2Avatar.style.background = Players.getColorHex(stats.player2.color);
@@ -796,4 +878,7 @@ const App = {
 };
 
 // Inicializa quando o DOM estiver pronto
-document.addEventListener('DOMContentLoaded', () => App.init());
+document.addEventListener('DOMContentLoaded', () => {
+  window.App = App; // Para acesso global (debug e Board.js)
+  App.init();
+});

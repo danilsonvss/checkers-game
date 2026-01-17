@@ -522,23 +522,28 @@ const Board = {
     if (Game.gameOver) return;
     
     const piece = Game.board[row][col];
-    console.log('handlePieceClick:', row, col, 'piece:', piece);
     
-    // Validação de multiplayer: só pode selecionar minhas peças e no meu turno
+    // Validação Multiplayer
     if (Game.isMultiplayer) {
       if (!Multiplayer.isMyTurn()) {
-        console.log('Not my turn to select');
+        if (window.App && window.App.screenLog) window.App.screenLog('Clique bloqueado: Não é sua vez');
+        console.log('Not my turn');
         Sounds.playError();
         return;
       }
       
-      // Verifica se a peça pertence ao jogador local
-      // Azul = 2 (pieces 3, 4), Vermelho = 1 (pieces 1, 2)
+      // Valida se a peça é minha
+      // 1=RED, 2=RED_KING, 3=BLUE, 4=BLUE_KING
+      // Player 1 (Host) = RED. Player 2 (Client) = BLUE.
       const isMyPieceColor = (Multiplayer.myPlayer === 1 && (piece === 1 || piece === 2)) ||
                              (Multiplayer.myPlayer === 2 && (piece === 3 || piece === 4));
-                             
+      
+      if (window.App && window.App.screenLog) {
+        window.App.screenLog(`Click: Me=${Multiplayer.myPlayer} Piece=${piece} Valid=${isMyPieceColor}`);
+      }
+
       if (!isMyPieceColor) {
-        console.log('Not my piece color');
+        console.log('Not my piece color. MyPlayer:', Multiplayer.myPlayer, 'Piece:', piece);
         Sounds.playError();
         return;
       }
@@ -618,6 +623,9 @@ const Board = {
         // Envia movimento se for multiplayer
         if (Game.isMultiplayer) {
           console.log('Sending move:', from, 'to', { row, col });
+          if (window.App && window.App.screenLog) {
+            window.App.screenLog(`ENVIANDO move: ${from.row},${from.col} -> ${row},${col}`);
+          }
           Multiplayer.sendMove(from, { row, col });
         }
         

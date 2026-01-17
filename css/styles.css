@@ -195,15 +195,16 @@ input:focus,
    LAYOUT PRINCIPAL
    ======================================== */
 .app-container {
-  min-height: 100vh;
+  min-height: 100vh; /* Pode ser problema no mobile browser que esconde barra URL */
+  min-height: 100dvh; /* Dynamic viewport height para mobile moderno */
   width: 100%;
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
-  padding: var(--spacing-lg);
+  align-items: center;
   position: relative;
-  z-index: 1;
+  overflow: hidden;
+  padding: 0;
 }
 
 .screen {
@@ -1347,7 +1348,7 @@ input:focus,
   
   .app-container {
     padding: var(--spacing-sm);
-    justify-content: flex-start;
+    /* justify-content: flex-start;  <-- REMOVIDO para permitir centralização */
   }
   
   .header {
@@ -1694,6 +1695,17 @@ input:focus,
   100% { transform: scale(1); }
 }
 
+/* Board Inversion for Multiplayer P2 */
+.board-wrapper.board-inverted .board {
+  transform: rotate(180deg);
+}
+
+.board-wrapper.board-inverted .piece,
+.board-wrapper.board-inverted .cell-highlight,
+.board-wrapper.board-inverted .valid-move-indicator {
+  transform: rotate(180deg);
+}
+
 /* Animação para captura obrigatória */
 .piece-must-capture {
   animation: mustCapture 1s ease-in-out infinite;
@@ -1883,6 +1895,10 @@ input:focus,
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
+}
+
+#btn-create-room {
+  margin-bottom: var(--spacing-md);
 }
 
 .lobby-input-group {

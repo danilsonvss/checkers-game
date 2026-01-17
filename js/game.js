@@ -51,7 +51,9 @@ const Game = {
     this.redPieces = 12;
     this.bluePieces = 12;
     this.startTime = Date.now();
+    this.startTime = Date.now();
     this.gameOver = false;
+    this.isMultiplayer = false; // Reset safe default
     
     this.initBoard();
   },

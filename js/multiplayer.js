@@ -62,6 +62,7 @@ const Multiplayer = {
         this.socket = new WebSocket(serverUrl);
         
         this.socket.onopen = () => {
+          this.startHeartbeat();
           // Envia comando para criar sala
           this.send({
             type: 'create_room',
@@ -101,6 +102,7 @@ const Multiplayer = {
         this.socket = new WebSocket(serverUrl);
         
         this.socket.onopen = () => {
+          this.startHeartbeat();
           this.send({
             type: 'join_room',
             roomCode: this.roomCode,
@@ -199,6 +201,12 @@ const Multiplayer = {
           // Jogo terminou
           break;
           
+        case 'opponent_disconnected':
+          if (this.onDisconnected) {
+            this.onDisconnected(); // Notifica que o oponente saiu
+          }
+          break;
+
         case 'error':
           console.error('Server error:', data.message);
           if (this.onError) {
@@ -209,6 +217,18 @@ const Multiplayer = {
     } catch (error) {
       console.error('Error parsing message:', error);
     }
+  },
+
+  /**
+   * Mantém a conexão ativa (Heartbeat)
+   */
+  startHeartbeat() {
+    if (this.pingInterval) clearInterval(this.pingInterval);
+    this.pingInterval = setInterval(() => {
+      if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+        this.socket.send(JSON.stringify({ type: 'ping' }));
+      }
+    }, 30000);
   },
 
   /**
