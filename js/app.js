@@ -29,6 +29,9 @@ const App = {
     // Configura listeners globais
     this.setupGlobalListeners();
     
+    // Configura interceptação do botão voltar do navegador (importante para TV)
+    this.setupBrowserBackButton();
+    
     // Mostra tela inicial
     this.showScreen('home');
     
@@ -37,6 +40,31 @@ const App = {
     document.addEventListener('keydown', () => Sounds.resume(), { once: true });
     
     console.log('🎮 Jogo de Damas inicializado!');
+  },
+
+  /**
+   * Configura interceptação do botão voltar do navegador
+   * Isso é crucial para TV Android onde o controle remoto dispara history.back()
+   */
+  setupBrowserBackButton() {
+    // Adiciona entrada no histórico para interceptar
+    history.pushState({ screen: 'home' }, '', '');
+    
+    // Intercepta o evento de voltar do navegador
+    window.addEventListener('popstate', (e) => {
+      // Previne saída do jogo
+      e.preventDefault();
+      
+      // Se não estamos na home, volta para a tela anterior
+      if (this.currentScreen !== 'home') {
+        // Re-adiciona entrada no histórico
+        history.pushState({ screen: this.currentScreen }, '', '');
+        this.goBack();
+      } else {
+        // Se já estamos na home, re-adiciona entrada para não sair
+        history.pushState({ screen: 'home' }, '', '');
+      }
+    });
   },
 
   /**
@@ -163,6 +191,16 @@ const App = {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         e.preventDefault();
         this.handleArrowNavigation(e.key);
+      }
+      
+      // Botão OK/Enter - ativa o elemento focado
+      if (e.key === 'Enter' || e.key === ' ') {
+        // Se o elemento ativo é uma célula ou peça do tabuleiro, simula clique
+        const active = document.activeElement;
+        if (active && (active.classList.contains('cell') || active.classList.contains('piece'))) {
+          e.preventDefault();
+          active.click();
+        }
       }
       
       // Botão voltar (Escape ou Backspace)

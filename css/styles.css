@@ -546,8 +546,8 @@ input:focus,
   grid-template-columns: repeat(8, 1fr);
   grid-template-rows: repeat(8, 1fr);
   gap: 2px;
-  width: min(600px, 90vw);
-  height: min(600px, 90vw);
+  width: min(450px, 70vh);
+  height: min(450px, 70vh);
   background: #451a03;
   border-radius: var(--radius-md);
   overflow: hidden;
