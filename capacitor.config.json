@@ -1,5 +1,5 @@
 {
-  "appId": "com.danilson.damas",
+  "appId": "br.com.danilson.damas",
   "appName": "Jogo de Damas",
   "webDir": "www",
   "bundledWebRuntime": false,
