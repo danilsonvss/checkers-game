@@ -7,6 +7,6 @@
     "allowMixedContent": true
   },
   "server": {
-    "androidScheme": "https"
+    "androidScheme": "http"
   }
 }

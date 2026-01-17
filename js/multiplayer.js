@@ -139,9 +139,17 @@ const Multiplayer = {
   getServerUrl() {
     if (this.serverUrl) return this.serverUrl;
     
-    // Usa o mesmo host que a página, porta 3000
+    // Para app Capacitor, usar IP fixo do servidor
+    // No navegador, usa o mesmo host que a página
+    let host = window.location.hostname;
+    
+    // Se estamos em Capacitor (localhost) ou não há host, usar IP do servidor
+    if (!host || host === 'localhost' || host === '127.0.0.1') {
+      // IP do servidor de desenvolvimento - ajuste para seu ambiente
+      host = '192.168.100.100';
+    }
+    
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.hostname || 'localhost';
     return `${protocol}//${host}:3000`;
   },
 
