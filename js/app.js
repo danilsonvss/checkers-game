@@ -115,24 +115,38 @@ const App = {
       Game.init(this.selectedPlayer1, this.selectedPlayer2);
       Game.isMultiplayer = true;
       this.isMultiplayer = true;
+      console.log('Game started in MULTIPLAYER mode');
+      // alert('Multiplayer iniciado! Eu sou: ' + (Multiplayer.isHost ? 'Host (Vermelho)' : 'Cliente (Azul)'));
       this.showScreen('game');
     };
     
     Multiplayer.onOpponentMove = (from, to) => {
-      // Aplica o movimento do oponente
-      if (Game.selectPiece(from.row, from.col)) {
-        const result = Game.movePiece(to.row, to.col);
+      console.log('Received opponent move:', from, to);
+      console.log('Current player:', Game.currentPlayer, 'Piece at from:', Game.board[from.row][from.col]);
+      
+      // Força seleção da peça para garantir que o movimento ocorra
+      // Bypass da validação de UI pois é um movimento remoto autorizado
+      Game.selectedPiece = { row: from.row, col: from.col };
+      Game.validMoves = Game.getValidMoves(from.row, from.col);
+      
+      const result = Game.movePiece(to.row, to.col);
+      console.log('Move result:', result);
+      
+      if (result.success) {
         Board.render();
         this.updateGameInfo();
         
         if (result.gameOver) {
           setTimeout(() => this.showGameOver(result.winner), 500);
         }
+      } else {
+        console.error('Failed to apply opponent move!');
+        alert('Erro de sincronização: movimento inválido recebido');
       }
     };
     
     Multiplayer.onError = (message) => {
-      alert('Erro: ' + message);
+      alert('Erro Multiplayer: ' + message);
     };
   },
 
