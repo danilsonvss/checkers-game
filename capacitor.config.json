@@ -1,0 +1,12 @@
+{
+  "appId": "com.danilson.damas",
+  "appName": "Jogo de Damas",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": true
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}
