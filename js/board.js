@@ -524,6 +524,26 @@ const Board = {
     const piece = Game.board[row][col];
     console.log('handlePieceClick:', row, col, 'piece:', piece);
     
+    // Validação de multiplayer: só pode selecionar minhas peças e no meu turno
+    if (Game.isMultiplayer) {
+      if (!Multiplayer.isMyTurn()) {
+        console.log('Not my turn to select');
+        Sounds.playError();
+        return;
+      }
+      
+      // Verifica se a peça pertence ao jogador local
+      // Azul = 2 (pieces 3, 4), Vermelho = 1 (pieces 1, 2)
+      const isMyPieceColor = (Multiplayer.myPlayer === 1 && (piece === 1 || piece === 2)) ||
+                             (Multiplayer.myPlayer === 2 && (piece === 3 || piece === 4));
+                             
+      if (!isMyPieceColor) {
+        console.log('Not my piece color');
+        Sounds.playError();
+        return;
+      }
+    }
+    
     // Se clicou na própria peça selecionada, deseleciona
     if (Game.selectedPiece && 
         Game.selectedPiece.row === row && 
@@ -580,18 +600,36 @@ const Board = {
     
     // Se tem uma peça selecionada e esta é uma posição válida
     if (Game.selectedPiece) {
+      
+      // Validação de turno para multiplayer
+      if (Game.isMultiplayer && !Multiplayer.isMyTurn()) {
+        console.log('Not my turn!');
+        Sounds.playError();
+        return;
+      }
+      
+      // Guarda posição original para enviar depois
+      const from = { row: Game.selectedPiece.row, col: Game.selectedPiece.col };
+      
       const result = Game.movePiece(row, col);
       
       if (result.success) {
+        
+        // Envia movimento se for multiplayer
+        if (Game.isMultiplayer) {
+          console.log('Sending move:', from, 'to', { row, col });
+          Multiplayer.sendMove(from, { row, col });
+        }
+        
         this.cursorRow = row;
         this.cursorCol = col;
         
         this.render();
-        App.updateGameInfo();
+        if (window.App) window.App.updateGameInfo();
         
         if (result.gameOver) {
           setTimeout(() => {
-            App.showGameOver(result.winner);
+            if (window.App) window.App.showGameOver(result.winner);
           }, 500);
         } else if (result.continueCapture) {
           setTimeout(() => this.render(), 100);
