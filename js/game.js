@@ -333,7 +333,7 @@ const Game = {
    * @returns {Object} Estado do fim de jogo
    */
   checkGameOver() {
-    // Verifica se algum jogador ficou sem peças
+    // Verifica se algum jogador ficou sem peças (única condição de vitória)
     if (this.redPieces === 0) {
       return { over: true, winner: 2 };
     }
@@ -341,26 +341,7 @@ const Game = {
       return { over: true, winner: 1 };
     }
     
-    // Verifica se o jogador atual tem movimentos válidos
-    let hasValidMove = false;
-    for (let row = 0; row < this.BOARD_SIZE; row++) {
-      for (let col = 0; col < this.BOARD_SIZE; col++) {
-        if (this.isCurrentPlayerPiece(this.board[row][col])) {
-          const moves = this.getValidMoves(row, col);
-          if (moves.length > 0) {
-            hasValidMove = true;
-            break;
-          }
-        }
-      }
-      if (hasValidMove) break;
-    }
-    
-    if (!hasValidMove) {
-      // O jogador atual não tem movimentos, o oponente vence
-      return { over: true, winner: this.currentPlayer === 1 ? 2 : 1 };
-    }
-    
+    // Jogo continua enquanto ambos têm peças
     return { over: false };
   },
 
