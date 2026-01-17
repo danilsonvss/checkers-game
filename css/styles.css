@@ -1430,13 +1430,18 @@ input:focus,
   
   /* Tabuleiro responsivo */
   .board-wrapper {
-    padding: 8px;
+    padding: 2px;
     margin: 0 auto;
+    width: 100%;
+    display: flex;
+    justify-content: center;
   }
   
   .board {
-    width: min(88vw, 380px);
-    height: min(88vw, 380px);
+    /* Garante que cabe na tela com margem segura */
+    width: min(92vw, 380px);
+    height: min(92vw, 380px);
+    max-width: 100%;
   }
   
   /* Seleção de jogadores */
