@@ -138,29 +138,37 @@ const Board = {
    */
   handleKeyNavigation(e) {
     const key = e.key;
+    console.log('Board handleKeyNavigation key:', key);
     
     // Navegação por setas - move o cursor
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) {
       e.preventDefault();
       this.moveCursor(key);
+      console.log('Cursor moved to:', this.cursorRow, this.cursorCol);
       return true;
     }
     
     // Enter/Space - seleciona peça ou move
     if (key === 'Enter' || key === ' ') {
       e.preventDefault();
+      console.log('Enter pressed - calling handleCursorAction');
       this.handleCursorAction();
       return true;
     }
     
-    // Escape - cancela seleção
-    if (key === 'Escape' && Game.selectedPiece && !Game.captureChain) {
+    // Escape - cancela seleção ou volta
+    if (key === 'Escape') {
       e.preventDefault();
-      Game.selectedPiece = null;
-      Game.validMoves = [];
-      this.render();
-      Sounds.playCancel();
-      return true;
+      if (Game.selectedPiece && !Game.captureChain) {
+        Game.selectedPiece = null;
+        Game.validMoves = [];
+        this.render();
+        Sounds.playCancel();
+        console.log('Selection cancelled');
+        return true;
+      }
+      // Se não tem peça selecionada, deixa o App tratar (voltar)
+      return false;
     }
     
     return false;
@@ -205,10 +213,32 @@ const Board = {
     const col = this.cursorCol;
     const piece = Game.board[row][col];
     
+    console.log('Cursor action at:', row, col, 'piece:', piece, 'currentPlayer:', Game.currentPlayer);
+    
+    // Se há uma peça selecionada e esta é uma casa válida para mover
+    if (Game.selectedPiece) {
+      const isValidMove = Game.validMoves.some(m => m.row === row && m.col === col);
+      if (isValidMove) {
+        console.log('Moving to valid position');
+        this.handleCellClick(row, col);
+        return;
+      }
+    }
+    
+    // Se é uma peça do jogador atual, tenta selecionar
     if (Game.isCurrentPlayerPiece(piece)) {
+      console.log('Selecting piece');
       this.handlePieceClick(row, col);
-    } else {
+    } 
+    // Se é uma casa vazia ou movimento válido
+    else if (piece === Game.EMPTY) {
+      console.log('Clicking on empty cell');
       this.handleCellClick(row, col);
+    }
+    // Se é uma peça do oponente, não faz nada (ou mostra erro)
+    else {
+      console.log('Cannot select opponent piece');
+      Sounds.playError();
     }
   },
 
@@ -492,6 +522,7 @@ const Board = {
     if (Game.gameOver) return;
     
     const piece = Game.board[row][col];
+    console.log('handlePieceClick:', row, col, 'piece:', piece);
     
     // Se clicou na própria peça selecionada, deseleciona
     if (Game.selectedPiece && 
@@ -502,6 +533,7 @@ const Board = {
         Game.validMoves = [];
         this.render();
         Sounds.playCancel();
+        console.log('Deselected piece');
       }
       return;
     }
@@ -509,8 +541,14 @@ const Board = {
     // Se já tem uma peça selecionada e clicou em outra peça do mesmo jogador
     if (Game.selectedPiece && Game.isCurrentPlayerPiece(piece)) {
       if (!Game.captureChain) {
-        Game.selectPiece(row, col);
-        this.render();
+        if (Game.selectPiece(row, col)) {
+          this.render();
+          Sounds.playSelect();
+          console.log('Changed selection to:', row, col);
+        } else {
+          Sounds.playError();
+          console.log('Cannot select this piece (maybe must capture)');
+        }
       }
       return;
     }
@@ -518,6 +556,11 @@ const Board = {
     // Tenta selecionar a peça
     if (Game.selectPiece(row, col)) {
       this.render();
+      Sounds.playSelect();
+      console.log('Selected piece at:', row, col, 'valid moves:', Game.validMoves.length);
+    } else {
+      Sounds.playError();
+      console.log('Selection failed - maybe must capture with another piece');
     }
   },
 
