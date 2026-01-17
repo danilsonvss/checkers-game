@@ -1,4 +1,4 @@
-package br.com.danilson.damas;
+package br.com.danilson.checkers;
 
 import com.getcapacitor.BridgeActivity;
 
