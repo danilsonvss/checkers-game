@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="description" content="Jogo de Damas divertido para toda a família - jogar offline na TV ou computador">
+  <meta name="theme-color" content="#1e1b4b">
+  <title>🎮 Jogo de Damas - Diversão em Família!</title>
+  
+  <!-- Favicon emoji -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎮</text></svg>">
+  
+  <!-- Estilos -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- Botão Voltar (fixo) -->
+    <button id="btn-back" class="btn-back focusable" style="display: none;" aria-label="Voltar">
+      ←
+    </button>
+    
+    <!-- ============================================ -->
+    <!-- TELA: HOME (Menu Principal) -->
+    <!-- ============================================ -->
+    <div id="home" class="screen active">
+      <header class="header">
+        <h1 class="header__title">🎮 Jogo de Damas</h1>
+        <p class="header__subtitle">Diversão para toda a família!</p>
+      </header>
+      
+      <nav class="menu">
+        <button id="btn-new-game" class="menu__button focusable">
+          <span class="menu__button__icon">🎯</span>
+          Nova Partida
+        </button>
+        
+        <button id="btn-players" class="menu__button menu__button--secondary focusable">
+          <span class="menu__button__icon">👥</span>
+          Jogadores
+        </button>
+        
+        <button id="btn-ranking" class="menu__button focusable">
+          <span class="menu__button__icon">🏆</span>
+          Ranking
+        </button>
+      </nav>
+    </div>
+    
+    <!-- ============================================ -->
+    <!-- TELA: JOGADORES (Lista e Gerenciamento) -->
+    <!-- ============================================ -->
+    <div id="players" class="screen">
+      <header class="header">
+        <h1 class="header__title">👥 Jogadores</h1>
+        <p class="header__subtitle">Gerencie os jogadores cadastrados</p>
+      </header>
+      
+      <div class="card" style="width: 100%; max-width: 500px;">
+        <div id="players-list" class="players-list">
+          <!-- Lista de jogadores será renderizada aqui -->
+        </div>
+        
+        <button id="btn-add-player" class="btn btn--secondary btn--full mt-lg focusable">
+          ➕ Adicionar Jogador
+        </button>
+      </div>
+    </div>
+    
+    <!-- ============================================ -->
+    <!-- TELA: FORMULÁRIO DE JOGADOR -->
+    <!-- ============================================ -->
+    <div id="player-form" class="screen">
+      <header class="header">
+        <h1 id="player-form-title" class="header__title">Novo Jogador</h1>
+      </header>
+      
+      <div class="card" style="width: 100%; max-width: 450px;">
+        <div class="form-group">
+          <label class="form-group__label" for="player-name">Nome do Jogador</label>
+          <input 
+            type="text" 
+            id="player-name" 
+            class="form-group__input focusable" 
+            placeholder="Digite o nome..."
+            maxlength="20"
+            autocomplete="off"
+          >
+        </div>
+        
+        <div class="form-group">
+          <label class="form-group__label">Cor do Avatar</label>
+          <div id="color-picker" class="avatar-picker">
+            <!-- Cores serão renderizadas aqui -->
+          </div>
+        </div>
+        
+        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+          <button id="btn-cancel-player" class="btn btn--outline focusable" style="flex: 1;">
+            Cancelar
+          </button>
+          <button id="btn-save-player" class="btn btn--success focusable" style="flex: 1;">
+            ✓ Salvar
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- ============================================ -->
+    <!-- TELA: SELEÇÃO DE JOGADORES PARA PARTIDA -->
+    <!-- ============================================ -->
+    <div id="select-players" class="screen">
+      <header class="header">
+        <h1 class="header__title">🎯 Nova Partida</h1>
+        <p id="selecting-for-label" class="header__subtitle">Selecione os jogadores</p>
+      </header>
+      
+      <!-- Slots dos jogadores selecionados -->
+      <div class="player-selection">
+        <div class="player-slot player-slot--red">
+          <div class="player-slot__label">🔴 Jogador 1</div>
+          <div id="slot1-avatar" class="player-slot__avatar" style="background: #6b7280;">?</div>
+          <div id="slot1-name" class="player-slot__name">Selecione...</div>
+        </div>
+        
+        <div style="font-size: 2rem; display: flex; align-items: center;">⚔️</div>
+        
+        <div class="player-slot player-slot--blue">
+          <div class="player-slot__label">🔵 Jogador 2</div>
+          <div id="slot2-avatar" class="player-slot__avatar" style="background: #6b7280;">?</div>
+          <div id="slot2-name" class="player-slot__name">Selecione...</div>
+        </div>
+      </div>
+      
+      <!-- Lista de jogadores para selecionar -->
+      <div class="card" style="width: 100%; max-width: 500px;">
+        <div id="select-players-list" class="players-list">
+          <!-- Lista de jogadores será renderizada aqui -->
+        </div>
+        
+        <button id="btn-start-game" class="btn btn--success btn--large btn--full mt-lg focusable" disabled style="opacity: 0.5;">
+          🎮 Iniciar Partida
+        </button>
+      </div>
+    </div>
+    
+    <!-- ============================================ -->
+    <!-- TELA: JOGO (Tabuleiro) -->
+    <!-- ============================================ -->
+    <div id="game" class="screen">
+      <div class="game-container">
+        <!-- Informações dos Jogadores -->
+        <div class="game-info">
+          <div id="player1-info" class="player-info">
+            <div id="player1-avatar" class="player-info__avatar">?</div>
+            <div class="player-info__details">
+              <div id="player1-name" class="player-info__name">Jogador 1</div>
+              <div id="player1-pieces" class="player-info__pieces">12 peças</div>
+            </div>
+          </div>
+          
+          <div id="turn-indicator" class="turn-indicator">Vez de...</div>
+          
+          <div id="player2-info" class="player-info">
+            <div id="player2-avatar" class="player-info__avatar">?</div>
+            <div class="player-info__details">
+              <div id="player2-name" class="player-info__name">Jogador 2</div>
+              <div id="player2-pieces" class="player-info__pieces">12 peças</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Tabuleiro -->
+        <div class="board-wrapper">
+          <div id="game-board" class="board">
+            <!-- Tabuleiro será renderizado pelo JavaScript -->
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- ============================================ -->
+    <!-- TELA: RANKING -->
+    <!-- ============================================ -->
+    <div id="ranking" class="screen">
+      <header class="header">
+        <h1 class="header__title">🏆 Ranking</h1>
+        <p class="header__subtitle">Os melhores jogadores!</p>
+      </header>
+      
+      <div class="card" style="width: 100%; max-width: 600px;">
+        <div id="ranking-list" class="ranking-list">
+          <!-- Ranking será renderizado aqui -->
+        </div>
+      </div>
+    </div>
+    
+    <!-- ============================================ -->
+    <!-- MODAL: FIM DE JOGO -->
+    <!-- ============================================ -->
+    <div id="game-over-modal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal__icon">🏆</div>
+        <h2 class="modal__title">Parabéns!</h2>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+          <div id="winner-avatar" class="player-slot__avatar" style="width: 100px; height: 100px; font-size: 3rem;">?</div>
+          <div id="winner-name" style="font-size: 1.5rem; font-weight: 700;">Jogador</div>
+          <div id="winner-pieces" class="modal__subtitle" style="margin-bottom: 0;">Vitória!</div>
+        </div>
+        <div class="modal__buttons">
+          <button id="btn-play-again" class="btn btn--success btn--large focusable">
+            🔄 Jogar Novamente
+          </button>
+          <button id="btn-back-home" class="btn btn--outline focusable">
+            🏠 Menu Principal
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Container de Confetes -->
+    <div id="confetti-container" class="confetti-container"></div>
+    
+  </div>
+  
+  <!-- Scripts -->
+  <script src="js/storage.js"></script>
+  <script src="js/sounds.js"></script>
+  <script src="js/players.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/board.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
