@@ -31,6 +31,9 @@ const Game = {
   // Tempo de jogo
   startTime: null,
   gameOver: false,
+  
+  // Multiplayer
+  isMultiplayer: false,
 
   /**
    * Inicializa um novo jogo

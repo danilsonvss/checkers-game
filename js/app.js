@@ -2,6 +2,7 @@
  * APP.JS - Aplicação Principal
  * Gerencia navegação, telas e inicialização do jogo
  * Otimizado para TV com navegação D-pad
+ * Suporte a Multiplayer WiFi
  */
 
 const App = {
@@ -15,6 +16,10 @@ const App = {
   selectedPlayer1: null,
   selectedPlayer2: null,
   selectingFor: null, // 1 ou 2
+  
+  // Modo de jogo
+  gameMode: 'local', // 'local' ou 'multiplayer'
+  isMultiplayer: false,
 
   /**
    * Inicializa a aplicação
@@ -35,6 +40,9 @@ const App = {
     
     // Configura interceptação do botão voltar do navegador (importante para TV)
     this.setupBrowserBackButton();
+    
+    // Configura callbacks do multiplayer
+    this.setupMultiplayerCallbacks();
     
     // Mostra tela inicial
     this.showScreen('home');
@@ -59,32 +67,73 @@ const App = {
 
   /**
    * Configura interceptação do botão voltar do navegador
-   * Isso é crucial para TV Android onde o controle remoto dispara history.back()
    */
   setupBrowserBackButton() {
-    // Adiciona entrada inicial no histórico
     history.replaceState({ screen: 'home', index: 0 }, '', '');
     
-    // Flag para controlar nossos próprios pushes
-    this.handlingBack = false;
-    
-    // Intercepta o evento de voltar do navegador
     window.addEventListener('popstate', (e) => {
-      // Sempre previne a navegação padrão
       e.preventDefault();
       
-      // Se estamos na home, não faz nada (apenas re-adiciona o estado)
       if (this.currentScreen === 'home') {
         history.pushState({ screen: 'home', index: 0 }, '', '');
         return;
       }
       
-      // Navega de volta internamente
       this.goBack();
-      
-      // Re-adiciona estado para manter a interceptação
       history.pushState({ screen: this.currentScreen, index: Date.now() }, '', '');
     });
+  },
+
+  /**
+   * Configura callbacks do multiplayer
+   */
+  setupMultiplayerCallbacks() {
+    Multiplayer.onConnected = (playerName) => {
+      this.showLobbyState('connected', playerName);
+    };
+    
+    Multiplayer.onDisconnected = () => {
+      if (this.isMultiplayer && this.currentScreen === 'game') {
+        alert('Conexão perdida com o oponente!');
+        this.goBack();
+      }
+    };
+    
+    Multiplayer.onGameStart = (data) => {
+      // Configura e inicia o jogo
+      const players = Storage.getPlayers();
+      this.selectedPlayer1 = players[0] || { id: '1', name: 'Host', color: 'red' };
+      this.selectedPlayer2 = { id: '2', name: Multiplayer.opponentName, color: 'blue' };
+      
+      if (!Multiplayer.isHost) {
+        // Cliente inverte os jogadores (ele é azul)
+        const temp = this.selectedPlayer1;
+        this.selectedPlayer1 = this.selectedPlayer2;
+        this.selectedPlayer2 = temp;
+      }
+      
+      Game.init(this.selectedPlayer1, this.selectedPlayer2);
+      Game.isMultiplayer = true;
+      this.isMultiplayer = true;
+      this.showScreen('game');
+    };
+    
+    Multiplayer.onOpponentMove = (from, to) => {
+      // Aplica o movimento do oponente
+      if (Game.selectPiece(from.row, from.col)) {
+        const result = Game.movePiece(to.row, to.col);
+        Board.render();
+        this.updateGameInfo();
+        
+        if (result.gameOver) {
+          setTimeout(() => this.showGameOver(result.winner), 500);
+        }
+      }
+    };
+    
+    Multiplayer.onError = (message) => {
+      alert('Erro: ' + message);
+    };
   },
 
   /**
@@ -92,29 +141,22 @@ const App = {
    * @param {string} screenId 
    */
   showScreen(screenId) {
-    // Esconde todas as telas
     document.querySelectorAll('.screen').forEach(screen => {
       screen.classList.remove('active');
     });
     
-    // Salva no histórico apenas se for uma tela diferente
     if (this.currentScreen && this.currentScreen !== screenId) {
-      // Não duplica entradas no histórico
       if (this.screenHistory[this.screenHistory.length - 1] !== this.currentScreen) {
         this.screenHistory.push(this.currentScreen);
       }
     }
     
-    // Mostra a tela solicitada
     const screen = document.getElementById(screenId);
     if (screen) {
       screen.classList.add('active');
       this.currentScreen = screenId;
-      
-      // Executa ações específicas de cada tela
       this.onScreenShow(screenId);
       
-      // Foca no primeiro elemento navegável
       setTimeout(() => {
         const firstFocusable = screen.querySelector('.focusable:not([disabled]), button:not([disabled]), input:not([disabled])');
         if (firstFocusable) {
@@ -123,7 +165,6 @@ const App = {
       }, 100);
     }
     
-    // Mostra/esconde botão voltar
     const backBtn = document.getElementById('btn-back');
     if (backBtn) {
       backBtn.style.display = screenId === 'home' ? 'none' : 'flex';
@@ -141,11 +182,18 @@ const App = {
         break;
         
       case 'player-form':
-        // Foca no input de nome
         setTimeout(() => {
           const input = document.getElementById('player-name');
           if (input) input.focus();
         }, 100);
+        break;
+        
+      case 'game-mode':
+        // Nada específico
+        break;
+        
+      case 'multiplayer-lobby':
+        this.showLobbyState('options');
         break;
         
       case 'select-players':
@@ -162,7 +210,6 @@ const App = {
         Board.init('game-board');
         this.updateGameInfo();
         Sounds.playGameStart();
-        // Foca no tabuleiro para navegação
         setTimeout(() => Board.focusFirstPlayablePiece(), 200);
         break;
         
@@ -173,39 +220,69 @@ const App = {
   },
 
   /**
+   * Mostra estado do lobby multiplayer
+   * @param {string} state 'options', 'waiting', 'connecting', 'connected'
+   * @param {string} data Dados adicionais
+   */
+  showLobbyState(state, data) {
+    const states = ['lobby-options', 'lobby-waiting', 'lobby-connecting', 'lobby-connected'];
+    
+    states.forEach(s => {
+      const el = document.getElementById(s);
+      if (el) el.style.display = 'none';
+    });
+    
+    const activeEl = document.getElementById(`lobby-${state}`);
+    if (activeEl) activeEl.style.display = 'block';
+    
+    if (state === 'waiting' && Multiplayer.roomCode) {
+      document.getElementById('room-code-display').textContent = Multiplayer.roomCode;
+      document.getElementById('host-ip').textContent = Multiplayer.getLocalIP() + ':3000';
+    }
+    
+    if (state === 'connected' && data) {
+      document.getElementById('opponent-name').textContent = `Oponente: ${data}`;
+    }
+  },
+
+  /**
    * Volta para a tela anterior
    */
   goBack() {
-    // Se está no jogo, confirma abandono
-    if (this.currentScreen === 'game' && !Game.gameOver) {
-      if (!confirm('Deseja realmente abandonar a partida?')) {
-        return;
-      }
+    // Se está no jogo multiplayer, desconecta
+    if (this.currentScreen === 'game' && this.isMultiplayer) {
+      if (!confirm('Deseja abandonar a partida?')) return;
+      Multiplayer.disconnect();
+      this.isMultiplayer = false;
+    }
+    
+    // Se está no jogo local, confirma abandono
+    if (this.currentScreen === 'game' && !this.isMultiplayer && !Game.gameOver) {
+      if (!confirm('Deseja realmente abandonar a partida?')) return;
+    }
+    
+    // Se está no lobby, desconecta
+    if (this.currentScreen === 'multiplayer-lobby') {
+      Multiplayer.disconnect();
     }
     
     Sounds.playCancel();
     
-    // Remove a última tela do histórico
     let previousScreen = this.screenHistory.pop();
     
-    // Se veio do formulário de jogador, volta para jogadores (não para home)
     if (this.currentScreen === 'player-form') {
       previousScreen = 'players';
-      // Limpa duplicatas do histórico
       this.screenHistory = this.screenHistory.filter(s => s !== 'player-form');
     }
     
-    // Se não tem histórico, vai para home
     if (!previousScreen) {
       previousScreen = 'home';
     }
     
-    // Esconde todas as telas
     document.querySelectorAll('.screen').forEach(screen => {
       screen.classList.remove('active');
     });
     
-    // Mostra a anterior
     const screen = document.getElementById(previousScreen);
     if (screen) {
       screen.classList.add('active');
@@ -213,7 +290,6 @@ const App = {
       this.onScreenShow(previousScreen);
     }
     
-    // Botão voltar
     const backBtn = document.getElementById('btn-back');
     if (backBtn) {
       backBtn.style.display = previousScreen === 'home' ? 'none' : 'flex';
@@ -225,20 +301,22 @@ const App = {
    */
   setupKeyboardNavigation() {
     document.addEventListener('keydown', (e) => {
-      // Se estamos no jogo, delega para o Board
       if (this.currentScreen === 'game' && !Game.gameOver) {
+        // Verifica se é multiplayer e não é minha vez
+        if (this.isMultiplayer && !Multiplayer.isMyTurn()) {
+          return; // Bloqueia input
+        }
+        
         if (Board.handleKeyNavigation(e)) {
-          return; // Board tratou o evento
+          return;
         }
       }
       
-      // Navegação por setas
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         e.preventDefault();
         this.handleArrowNavigation(e.key);
       }
       
-      // Botão OK/Enter - ativa o elemento focado
       if (e.key === 'Enter' || e.key === ' ') {
         const active = document.activeElement;
         if (active && active.tagName !== 'INPUT') {
@@ -247,7 +325,6 @@ const App = {
         }
       }
       
-      // Botão voltar (Escape ou Backspace)
       if (e.key === 'Escape' || (e.key === 'Backspace' && document.activeElement.tagName !== 'INPUT')) {
         e.preventDefault();
         if (this.currentScreen !== 'home') {
@@ -259,7 +336,6 @@ const App = {
 
   /**
    * Navega entre elementos usando setas
-   * @param {string} key 
    */
   handleArrowNavigation(key) {
     const activeScreen = document.querySelector('.screen.active');
@@ -284,15 +360,9 @@ const App = {
 
   /**
    * Encontra o elemento mais próximo em uma direção
-   * @param {Array} elements 
-   * @param {Element} current 
-   * @param {string} direction 
-   * @returns {number} Índice do elemento mais próximo
    */
   findClosestElement(elements, current, direction) {
-    if (!current || !current.getBoundingClientRect) {
-      return 0;
-    }
+    if (!current || !current.getBoundingClientRect) return 0;
     
     const currentRect = current.getBoundingClientRect();
     const currentCenterX = currentRect.left + currentRect.width / 2;
@@ -339,7 +409,6 @@ const App = {
       }
       
       if (isValidDirection) {
-        // Score prioriza direção primária, depois secundária
         const score = primaryDistance + secondaryDistance * 0.5;
         if (score < bestScore) {
           bestScore = score;
@@ -348,7 +417,6 @@ const App = {
       }
     });
     
-    // Se não encontrou na direção, tenta encontrar o próximo na lista
     if (bestIndex === -1) {
       const currentIndex = elements.indexOf(current);
       if (currentIndex !== -1) {
@@ -372,10 +440,10 @@ const App = {
     // Botão voltar
     document.getElementById('btn-back')?.addEventListener('click', () => this.goBack());
     
-    // Menu principal
+    // Menu principal - agora vai para tela de modo de jogo
     document.getElementById('btn-new-game')?.addEventListener('click', () => {
       Sounds.playConfirm();
-      this.showScreen('select-players');
+      this.showScreen('game-mode');
     });
     
     document.getElementById('btn-players')?.addEventListener('click', () => {
@@ -386,6 +454,74 @@ const App = {
     document.getElementById('btn-ranking')?.addEventListener('click', () => {
       Sounds.playConfirm();
       this.showScreen('ranking');
+    });
+    
+    // Modo de jogo
+    document.getElementById('btn-mode-local')?.addEventListener('click', () => {
+      Sounds.playConfirm();
+      this.gameMode = 'local';
+      this.isMultiplayer = false;
+      this.showScreen('select-players');
+    });
+    
+    document.getElementById('btn-mode-online')?.addEventListener('click', () => {
+      Sounds.playConfirm();
+      this.gameMode = 'multiplayer';
+      this.showScreen('multiplayer-lobby');
+    });
+    
+    // Lobby multiplayer
+    document.getElementById('btn-create-room')?.addEventListener('click', async () => {
+      Sounds.playConfirm();
+      try {
+        const players = Storage.getPlayers();
+        const hostName = players[0]?.name || 'Host';
+        await Multiplayer.createRoom(hostName);
+        this.showLobbyState('waiting');
+      } catch (error) {
+        alert('Erro ao criar sala: ' + error.message);
+      }
+    });
+    
+    document.getElementById('btn-join-room')?.addEventListener('click', async () => {
+      const codeInput = document.getElementById('room-code-input');
+      const code = codeInput?.value.trim().toUpperCase();
+      
+      if (!code || code.length !== 6) {
+        Sounds.playError();
+        alert('Digite um código de sala válido (6 caracteres)');
+        return;
+      }
+      
+      Sounds.playConfirm();
+      this.showLobbyState('connecting');
+      
+      try {
+        const players = Storage.getPlayers();
+        const playerName = players[0]?.name || 'Jogador';
+        await Multiplayer.joinRoom(code, playerName);
+        this.showLobbyState('connected', Multiplayer.opponentName);
+      } catch (error) {
+        alert('Erro ao entrar: ' + error.message);
+        this.showLobbyState('options');
+      }
+    });
+    
+    document.getElementById('btn-cancel-host')?.addEventListener('click', () => {
+      Multiplayer.disconnect();
+      this.showLobbyState('options');
+    });
+    
+    document.getElementById('btn-cancel-join')?.addEventListener('click', () => {
+      Multiplayer.disconnect();
+      this.showLobbyState('options');
+    });
+    
+    document.getElementById('btn-start-multiplayer')?.addEventListener('click', () => {
+      if (Multiplayer.isHost) {
+        Multiplayer.startGame();
+      }
+      // O jogo será iniciado pelo callback onGameStart
     });
     
     // Tela de jogadores
@@ -405,20 +541,6 @@ const App = {
     });
     
     // Seleção de jogadores
-    document.getElementById('btn-select-player1')?.addEventListener('click', () => {
-      this.selectingFor = 1;
-      document.getElementById('selecting-for-label').textContent = 
-        'Selecione o Jogador 1 (Peças Vermelhas)';
-      this.highlightPlayerSlot(1);
-    });
-    
-    document.getElementById('btn-select-player2')?.addEventListener('click', () => {
-      this.selectingFor = 2;
-      document.getElementById('selecting-for-label').textContent = 
-        'Selecione o Jogador 2 (Peças Azuis)';
-      this.highlightPlayerSlot(2);
-    });
-    
     document.getElementById('btn-start-game')?.addEventListener('click', () => {
       this.startGame();
     });
@@ -431,6 +553,10 @@ const App = {
     document.getElementById('btn-back-home')?.addEventListener('click', () => {
       Sounds.playConfirm();
       this.hideModal();
+      if (this.isMultiplayer) {
+        Multiplayer.disconnect();
+        this.isMultiplayer = false;
+      }
       this.screenHistory = [];
       this.showScreen('home');
     });
@@ -438,7 +564,6 @@ const App = {
 
   /**
    * Handler para seleção de jogador
-   * @param {string} playerId 
    */
   onPlayerSelect(playerId) {
     if (!this.selectingFor) {
@@ -448,7 +573,6 @@ const App = {
     const player = Storage.getPlayerById(playerId);
     if (!player) return;
     
-    // Não permite selecionar o mesmo jogador para os dois lados
     if (this.selectingFor === 1 && this.selectedPlayer2?.id === playerId) {
       Sounds.playError();
       return;
@@ -501,13 +625,11 @@ const App = {
       slot2Avatar.textContent = '?';
     }
     
-    // Habilita botão de iniciar apenas se os dois jogadores estão selecionados
     if (startBtn) {
       startBtn.disabled = !(this.selectedPlayer1 && this.selectedPlayer2);
       startBtn.style.opacity = startBtn.disabled ? '0.5' : '1';
     }
     
-    // Atualiza label de instrução
     if (label) {
       if (!this.selectedPlayer1) {
         label.textContent = 'Selecione o Jogador 1 (Peças Vermelhas)';
@@ -518,26 +640,12 @@ const App = {
       }
     }
     
-    // Atualiza destaque dos slots
     document.querySelector('.player-slot--red')?.classList.toggle('active', this.selectingFor === 1);
     document.querySelector('.player-slot--blue')?.classList.toggle('active', this.selectingFor === 2);
   },
 
   /**
-   * Destaca o slot de jogador sendo selecionado
-   * @param {number} slot 
-   */
-  highlightPlayerSlot(slot) {
-    document.querySelectorAll('.player-slot').forEach(s => s.classList.remove('active'));
-    if (slot === 1) {
-      document.querySelector('.player-slot--red')?.classList.add('active');
-    } else {
-      document.querySelector('.player-slot--blue')?.classList.add('active');
-    }
-  },
-
-  /**
-   * Inicia uma nova partida
+   * Inicia uma nova partida local
    */
   startGame() {
     if (!this.selectedPlayer1 || !this.selectedPlayer2) {
@@ -546,6 +654,8 @@ const App = {
     }
     
     Game.init(this.selectedPlayer1, this.selectedPlayer2);
+    Game.isMultiplayer = false;
+    this.isMultiplayer = false;
     this.showScreen('game');
   },
 
@@ -555,7 +665,6 @@ const App = {
   updateGameInfo() {
     const stats = Game.getStats();
     
-    // Player 1 (RED)
     const p1Info = document.getElementById('player1-info');
     if (p1Info) {
       p1Info.classList.toggle('active', stats.currentPlayer === 1);
@@ -566,7 +675,6 @@ const App = {
       p1Avatar.textContent = Players.getInitial(stats.player1.name);
     }
     
-    // Player 2 (BLUE)
     const p2Info = document.getElementById('player2-info');
     if (p2Info) {
       p2Info.classList.toggle('active', stats.currentPlayer === 2);
@@ -577,21 +685,22 @@ const App = {
       p2Avatar.textContent = Players.getInitial(stats.player2.name);
     }
     
-    // Indicador de turno
     const turnIndicator = document.getElementById('turn-indicator');
     if (turnIndicator) {
-      turnIndicator.textContent = `Vez de ${stats.currentPlayerObj.name}`;
+      let turnText = `Vez de ${stats.currentPlayerObj.name}`;
+      if (this.isMultiplayer) {
+        turnText = Multiplayer.isMyTurn() ? 'Sua vez!' : `Vez de ${stats.currentPlayerObj.name}`;
+      }
+      turnIndicator.textContent = turnText;
     }
   },
 
   /**
    * Mostra modal de fim de jogo
-   * @param {number} winnerId - 1 para RED, 2 para BLUE
    */
   showGameOver(winnerId) {
     const result = Game.endGame(winnerId);
     
-    // Atualiza modal
     document.getElementById('winner-name').textContent = result.winner.name;
     document.getElementById('winner-avatar').style.background = 
       Players.getColorHex(result.winner.color);
@@ -600,14 +709,11 @@ const App = {
     document.getElementById('winner-pieces').textContent = 
       `Vitória com ${result.winnerPieces} peças restantes!`;
     
-    // Mostra modal
     document.getElementById('game-over-modal').classList.add('active');
     
-    // Efeitos de vitória
     Sounds.playVictory();
     this.showConfetti();
     
-    // Foca no botão de jogar novamente
     setTimeout(() => {
       document.getElementById('btn-play-again')?.focus();
     }, 500);
@@ -622,15 +728,21 @@ const App = {
   },
 
   /**
-   * Joga novamente com os mesmos jogadores
+   * Joga novamente
    */
   playAgain() {
     this.hideModal();
     Sounds.playConfirm();
-    Game.init(this.selectedPlayer1, this.selectedPlayer2);
-    Board.render();
-    this.updateGameInfo();
-    Sounds.playGameStart();
+    
+    if (this.isMultiplayer) {
+      // Em multiplayer, precisa reiniciar a partida via servidor
+      Multiplayer.startGame();
+    } else {
+      Game.init(this.selectedPlayer1, this.selectedPlayer2);
+      Board.render();
+      this.updateGameInfo();
+      Sounds.playGameStart();
+    }
   },
 
   /**

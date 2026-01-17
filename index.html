@@ -55,6 +55,109 @@
     </div>
     
     <!-- ============================================ -->
+    <!-- TELA: MODO DE JOGO -->
+    <!-- ============================================ -->
+    <div id="game-mode" class="screen">
+      <header class="header">
+        <h1 class="header__title">🎯 Modo de Jogo</h1>
+        <p class="header__subtitle">Como você quer jogar?</p>
+      </header>
+      
+      <div class="game-mode-options">
+        <button id="btn-mode-local" class="game-mode-btn focusable">
+          <div class="game-mode-btn__icon">📱</div>
+          <div class="game-mode-btn__content">
+            <div class="game-mode-btn__title">Mesmo Dispositivo</div>
+            <div class="game-mode-btn__desc">Jogar com alguém ao seu lado, passando o controle</div>
+          </div>
+        </button>
+        
+        <button id="btn-mode-online" class="game-mode-btn focusable">
+          <div class="game-mode-btn__icon">📶</div>
+          <div class="game-mode-btn__content">
+            <div class="game-mode-btn__title">Multiplayer WiFi</div>
+            <div class="game-mode-btn__desc">Jogar contra alguém na mesma rede WiFi</div>
+          </div>
+        </button>
+      </div>
+    </div>
+    
+    <!-- ============================================ -->
+    <!-- TELA: LOBBY MULTIPLAYER -->
+    <!-- ============================================ -->
+    <div id="multiplayer-lobby" class="screen">
+      <header class="header">
+        <h1 class="header__title">📶 Multiplayer</h1>
+        <p class="header__subtitle">Conecte-se com outro jogador</p>
+      </header>
+      
+      <div class="card lobby-container">
+        <div id="lobby-content">
+          <!-- Estado inicial: escolher criar ou entrar -->
+          <div id="lobby-options" class="lobby-options">
+            <button id="btn-create-room" class="btn btn--success btn--large btn--full focusable">
+              🏠 Criar Sala
+            </button>
+            
+            <div class="lobby-input-group">
+              <input type="text" id="room-code-input" class="form-group__input focusable" 
+                     placeholder="Código da sala..." maxlength="6" style="text-transform: uppercase;">
+              <button id="btn-join-room" class="btn btn--primary focusable">
+                Entrar
+              </button>
+            </div>
+          </div>
+          
+          <!-- Estado: aguardando jogador (host) -->
+          <div id="lobby-waiting" style="display: none;">
+            <p class="mb-md">Código da sala:</p>
+            <div id="room-code-display" class="room-code">------</div>
+            
+            <div class="connection-status connection-status--waiting mt-lg">
+              <div class="status-dot"></div>
+              <span>Aguardando jogador...</span>
+            </div>
+            
+            <p class="mt-lg" style="font-size: 0.9rem; color: var(--color-text-muted);">
+              Seu IP: <span id="host-ip">---</span>
+            </p>
+            
+            <button id="btn-cancel-host" class="btn btn--outline btn--full mt-lg focusable">
+              Cancelar
+            </button>
+          </div>
+          
+          <!-- Estado: conectando (cliente) -->
+          <div id="lobby-connecting" style="display: none;">
+            <div class="connection-status connection-status--waiting">
+              <div class="status-dot"></div>
+              <span>Conectando...</span>
+            </div>
+            
+            <button id="btn-cancel-join" class="btn btn--outline btn--full mt-lg focusable">
+              Cancelar
+            </button>
+          </div>
+          
+          <!-- Estado: conectado -->
+          <div id="lobby-connected" style="display: none;">
+            <div class="connection-status connection-status--connected mb-lg">
+              <div class="status-dot"></div>
+              <span>Conectado!</span>
+            </div>
+            
+            <p id="opponent-name" style="font-size: 1.2rem; font-weight: 700;">Jogador conectado</p>
+            
+            <button id="btn-start-multiplayer" class="btn btn--success btn--large btn--full mt-lg focusable">
+              🎮 Iniciar Partida
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <!-- ============================================ -->
     <!-- TELA: JOGADORES (Lista e Gerenciamento) -->
     <!-- ============================================ -->
     <div id="players" class="screen">
@@ -236,6 +339,7 @@
   <script src="js/players.js"></script>
   <script src="js/game.js"></script>
   <script src="js/board.js"></script>
+  <script src="js/multiplayer.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
